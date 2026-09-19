@@ -1,0 +1,1747 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+
+<title>Sigma Banana — Multidimensões</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  background: #111;
+  overflow: hidden;
+  height: 100%;
+  touch-action: none;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#game {
+  position: relative;
+  width: min(1100px, 100vw);
+  height: min(620px, 100vh);
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#hud,
+#dim {
+  position: absolute;
+  color: white;
+  font-weight: 900;
+  text-shadow: 0 2px 4px #000;
+  pointer-events: none;
+}
+
+#hud {
+  top: 12px;
+  left: 15px;
+  right: 15px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 19px;
+}
+
+#dim {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+}
+
+#controls {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.grp {
+  display: flex;
+  gap: 10px;
+}
+
+button {
+  pointer-events: auto;
+  width: 72px;
+  height: 64px;
+  border: 0;
+  border-radius: 18px;
+  background: #ffffffe8;
+  font-size: 30px;
+  font-weight: 900;
+  box-shadow: 0 5px 0 #0005;
+  touch-action: none;
+}
+
+button:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #0005;
+}
+
+#restart {
+  position: absolute;
+  top: 52px;
+  right: 14px;
+  width: auto;
+  height: 42px;
+  padding: 0 15px;
+  font-size: 16px;
+  display: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="game">
+
+<canvas id="c" width="1100" height="620"></canvas>
+
+<div id="hud">
+  <span id="score">🍌 0</span>
+  <span id="lives">❤️❤️❤️</span>
+</div>
+
+<div id="dim">🌎 NORMAL</div>
+
+<button id="restart">RESTART</button>
+
+<div id="controls">
+
+  <div class="grp">
+    <button id="l">◀️</button>
+    <button id="r">▶️</button>
+  </div>
+
+  <div class="grp">
+    <button id="j">⬆</button>
+  </div>
+
+</div>
+
+</div>
+
+<script>
+
+const C = document.getElementById("c");
+const x = C.getContext("2d");
+
+const W = 1100;
+const H = 620;
+
+/* =========================
+   DIMENSÕES
+========================= */
+
+const D = [
+
+  [
+    "🌎 NORMAL",
+    "#73d9ff",
+    "#62a64a",
+    "#70462b",
+    "bull"
+  ],
+
+  [
+    "🌋 LAVA",
+    "#260b12",
+    "#8d2920",
+    "#32171b",
+    "magma"
+  ],
+
+  [
+    "❄️ ICE",
+    "#9ce8ff",
+    "#cceff7",
+    "#6798ad",
+    "penguin"
+  ],
+
+  [
+    "🌌 VOID",
+    "#08051b",
+    "#4b287f",
+    "#171027",
+    "void"
+  ],
+
+  [
+    "🌴 JUNGLE",
+    "#43bb79",
+    "#4b9e3d",
+    "#493321",
+    "monkey"
+  ],
+
+  [
+    "👾 GLITCH",
+    "#130b1b",
+    "#24202e",
+    "#16131e",
+    "glitch"
+  ],
+
+  [
+    "🍌 BANANA",
+    "#ffe878",
+    "#e0b62c",
+    "#704718",
+    "banana"
+  ]
+
+];
+
+let world = 0;
+let score = 0;
+let lives = 3;
+let cam = 0;
+let dead = false;
+let cool = 0;
+
+/* =========================
+   CONTROLOS
+========================= */
+
+let key = {
+  l: false,
+  r: false
+};
+
+const p = {
+  x: 130,
+  y: 430,
+  w: 38,
+  h: 58,
+  vx: 0,
+  vy: 0,
+  on: false
+};
+
+function jump() {
+
+  if (!dead && (p.on || world === 3)) {
+
+    p.vy = -12;
+    p.on = false;
+
+  }
+
+}
+
+function bind(id, k) {
+
+  const b = document.getElementById(id);
+
+  b.onpointerdown = e => {
+
+    e.preventDefault();
+    key[k] = true;
+
+  };
+
+  b.onpointerup =
+  b.onpointercancel =
+  b.onpointerleave = e => {
+
+    e.preventDefault();
+    key[k] = false;
+
+  };
+
+}
+
+bind("l", "l");
+bind("r", "r");
+
+document.getElementById("j").onpointerdown = e => {
+
+  e.preventDefault();
+  jump();
+
+};
+
+document.getElementById("restart").onpointerdown = e => {
+
+  e.preventDefault();
+  reset();
+
+};
+
+onkeydown = e => {
+
+  if (e.key === "ArrowLeft" || e.key === "a")
+    key.l = true;
+
+  if (e.key === "ArrowRight" || e.key === "d")
+    key.r = true;
+
+  if (
+    e.key === " " ||
+    e.key === "ArrowUp" ||
+    e.key === "w"
+  )
+    jump();
+
+  if (e.key === "r")
+    reset();
+
+};
+
+onkeyup = e => {
+
+  if (e.key === "ArrowLeft" || e.key === "a")
+    key.l = false;
+
+  if (e.key === "ArrowRight" || e.key === "d")
+    key.r = false;
+
+};
+
+/* =========================
+   JOGO
+========================= */
+
+const sections = [];
+const enemies = [];
+
+for (let i = 0; i < 50; i++) {
+
+  const b = i * 650;
+
+  sections.push({
+
+    i,
+
+    type: i % 7,
+
+    b,
+
+    ground: [
+      [b, b + 280],
+      [b + 390, b + 650]
+    ],
+
+    plats: [
+
+      {
+        x: b + 80,
+        y: 405,
+        w: 175,
+        h: 20
+      },
+
+      {
+        x: b + 320,
+        y: 330,
+        w: 175,
+        h: 20
+      },
+
+      {
+        x: b + 500,
+        y: 425,
+        w: 120,
+        h: 20
+      }
+
+    ],
+
+    bananas: [
+
+      {
+        x: b + 120,
+        y: 360
+      },
+
+      {
+        x: b + 360,
+        y: 285
+      },
+
+      {
+        x: b + 535,
+        y: 380
+      }
+
+    ],
+
+    portal: {
+      x: b + 565,
+      y: 360
+    }
+
+  });
+
+  /* inimigo no chão */
+
+  enemies.push({
+
+    x: b + 210,
+
+    y: 478,
+
+    w: 52,
+
+    h: 42,
+
+    min: b + 20,
+
+    max: b + 270,
+
+    v: 1.25,
+
+    air: false,
+
+    type: i % 7,
+
+    kind: D[i % 7][4]
+
+  });
+
+  /* inimigo aéreo */
+
+  enemies.push({
+
+    x: b + 430,
+
+    y: 255,
+
+    w: 48,
+
+    h: 38,
+
+    min: b + 350,
+
+    max: b + 610,
+
+    v: 1.5,
+
+    air: true,
+
+    type: i % 7,
+
+    kind: i % 7 === 0
+      ? "bird"
+      : D[i % 7][4]
+
+  });
+
+}
+
+/* =========================
+   RESET
+========================= */
+
+function reset() {
+
+  world = 0;
+  score = 0;
+  lives = 3;
+  cam = 0;
+  dead = false;
+
+  p.x = 130;
+  p.y = 350;
+
+  p.vx = 0;
+  p.vy = 0;
+
+  sections.forEach(s => {
+
+    s.bananas.forEach(b => {
+
+      b.got = false;
+
+    });
+
+  });
+
+  document.getElementById("restart").style.display = "none";
+
+}
+
+/* =========================
+   COLISÃO
+========================= */
+
+function hit(a, b) {
+
+  return (
+
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y
+
+  );
+
+}
+
+function hurt() {
+
+  if (dead)
+    return;
+
+  lives--;
+
+  p.x -= 40;
+
+  p.vx = -5;
+  p.vy = -8;
+
+  if (lives <= 0) {
+
+    dead = true;
+
+    document.getElementById(
+      "restart"
+    ).style.display = "block";
+
+  }
+
+}
+
+/* =========================
+   BACKGROUNDS
+========================= */
+
+function bg() {
+
+  const d = D[world];
+
+  x.fillStyle = d[1];
+  x.fillRect(0, 0, W, H);
+
+  x.globalAlpha = .25;
+
+  /* NORMAL */
+
+  if (world === 0) {
+
+    x.fillStyle = "#fff";
+
+    for (let i = 0; i < 8; i++) {
+
+      let q =
+        (i * 180 - cam * .15) % 1200;
+
+      x.beginPath();
+
+      x.arc(
+        q,
+        100 + i % 3 * 35,
+        28,
+        0,
+        7
+      );
+
+      x.arc(
+        q + 30,
+        100 + i % 3 * 35,
+        20,
+        0,
+        7
+      );
+
+      x.fill();
+
+    }
+
+  }
+
+  /* LAVA */
+
+  if (world === 1) {
+
+    x.fillStyle = "#ff4b18";
+
+    for (let i = 0; i < 18; i++) {
+
+      let q =
+        (i * 80 - cam * .2) % 1100;
+
+      x.fillRect(
+        q,
+        80 + i % 6 * 65,
+        4,
+        20
+      );
+
+    }
+
+  }
+
+  /* ICE */
+
+  if (world === 2) {
+
+    x.fillStyle = "#fff";
+
+    for (let i = 0; i < 50; i++) {
+
+      let q =
+        (i * 97 - cam * .1) % 1100;
+
+      x.fillRect(
+        q,
+        (i * 53) % 470,
+        3,
+        9
+      );
+
+    }
+
+  }
+
+  /* VOID */
+
+  if (world === 3) {
+
+    x.fillStyle = "#fff";
+
+    for (let i = 0; i < 55; i++) {
+
+      let q =
+        (i * 91 - cam * .1) % 1100;
+
+      x.fillRect(
+        q,
+        (i * 67) % 470,
+        3,
+        3
+      );
+
+    }
+
+  }
+
+  /* JUNGLE */
+
+  if (world === 4) {
+
+    x.fillStyle = "#164d2c";
+
+    for (let i = 0; i < 10; i++) {
+
+      let q =
+        (i * 150 - cam * .15) % 1200;
+
+      x.fillRect(
+        q,
+        130,
+        24,
+        390
+      );
+
+    }
+
+  }
+
+  /* GLITCH */
+
+  if (world === 5) {
+
+    x.fillStyle = "#ff19b9";
+
+    for (let i = 0; i < 30; i++) {
+
+      let q =
+        (i * 73 - cam * .35) % 1100;
+
+      x.fillRect(
+        q,
+        (i * 97) % 480,
+        6,
+        6
+      );
+
+    }
+
+  }
+
+  /* BANANA */
+
+  if (world === 6) {
+
+    x.fillStyle = "#ff9f00";
+
+    for (let i = 0; i < 12; i++) {
+
+      let q =
+        (i * 130 - cam * .2) % 1100;
+
+      x.fillRect(
+        q,
+        100 + i % 4 * 80,
+        18,
+        8
+      );
+
+    }
+
+  }
+
+  x.globalAlpha = 1;
+
+}
+
+/* =========================
+   PLAYER
+========================= */
+
+function player() {
+
+  x.save();
+
+  x.translate(
+    p.x - cam,
+    p.y
+  );
+
+  x.rotate(
+    p.vx * .025
+  );
+
+  /* banana */
+
+  x.fillStyle = "#ffd21b";
+
+  x.beginPath();
+
+  x.ellipse(
+    19,
+    30,
+    17,
+    29,
+    0,
+    0,
+    7
+  );
+
+  x.fill();
+
+  /* sombra */
+
+  x.fillStyle = "#e8a800";
+
+  x.beginPath();
+
+  x.ellipse(
+    10,
+    31,
+    4,
+    20,
+    0,
+    0,
+    7
+  );
+
+  x.fill();
+
+  /* óculos */
+
+  x.fillStyle = "#111";
+
+  x.fillRect(
+    3,
+    14,
+    31,
+    12
+  );
+
+  x.fillStyle = "#fff";
+
+  x.fillRect(
+    7,
+    17,
+    9,
+    5
+  );
+
+  x.fillRect(
+    22,
+    17,
+    9,
+    5
+  );
+
+  /* pés */
+
+  x.fillStyle = "#222";
+
+  x.fillRect(
+    5,
+    53,
+    12,
+    5
+  );
+
+  x.fillRect(
+    22,
+    53,
+    12,
+    5
+  );
+
+  x.restore();
+
+}
+
+/* =========================
+   INIMIGOS
+========================= */
+
+function enemy(e) {
+
+  const q = e.x - cam;
+
+  const y =
+    e.y +
+    (
+      e.air
+        ? Math.sin(Date.now() / 180 + e.x) * 7
+        : 0
+    );
+
+  x.save();
+
+  x.translate(q, y);
+
+  /* TOURO */
+
+  if (e.kind === "bull") {
+
+    x.fillStyle = "#71452d";
+
+    x.beginPath();
+
+    x.ellipse(
+      26,
+      24,
+      25,
+      16,
+      0,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#392318";
+
+    x.fillRect(
+      10,
+      35,
+      7,
+      10
+    );
+
+    x.fillRect(
+      36,
+      35,
+      7,
+      10
+    );
+
+    /* chifres */
+
+    x.fillStyle = "#eee";
+
+    x.beginPath();
+
+    x.moveTo(8, 14);
+    x.lineTo(-6, 3);
+    x.lineTo(10, 9);
+
+    x.fill();
+
+    x.beginPath();
+
+    x.moveTo(44, 14);
+    x.lineTo(58, 3);
+    x.lineTo(42, 9);
+
+    x.fill();
+
+    /* olhos */
+
+    x.fillStyle = "#111";
+
+    x.fillRect(
+      14,
+      18,
+      5,
+      5
+    );
+
+    x.fillRect(
+      32,
+      18,
+      5,
+      5
+    );
+
+  }
+
+  /* MAGMA */
+
+  else if (e.kind === "magma") {
+
+    x.fillStyle = "#8d2b20";
+
+    x.beginPath();
+
+    x.arc(
+      26,
+      24,
+      22,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#ffad00";
+
+    x.beginPath();
+
+    x.arc(
+      14,
+      17,
+      6,
+      0,
+      7
+    );
+
+    x.arc(
+      37,
+      29,
+      5,
+      0,
+      7
+    );
+
+    x.fill();
+
+  }
+
+  /* PENGUIN */
+
+  else if (e.kind === "penguin") {
+
+    x.fillStyle = "#26364b";
+
+    x.beginPath();
+
+    x.ellipse(
+      26,
+      24,
+      20,
+      25,
+      0,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#fff";
+
+    x.beginPath();
+
+    x.ellipse(
+      26,
+      30,
+      12,
+      16,
+      0,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#ff9d18";
+
+    x.beginPath();
+
+    x.moveTo(25, 23);
+    x.lineTo(37, 27);
+    x.lineTo(25, 30);
+
+    x.fill();
+
+  }
+
+  /* VOID */
+
+  else if (e.kind === "void") {
+
+    x.fillStyle = "#11051f";
+
+    x.beginPath();
+
+    x.arc(
+      26,
+      23,
+      22,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.strokeStyle = "#c45cff";
+    x.lineWidth = 4;
+
+    x.stroke();
+
+    x.fillStyle = "#ff4bd3";
+
+    x.beginPath();
+
+    x.arc(
+      18,
+      20,
+      4,
+      0,
+      7
+    );
+
+    x.arc(
+      34,
+      20,
+      4,
+      0,
+      7
+    );
+
+    x.fill();
+
+  }
+
+  /* MACACO */
+
+  else if (e.kind === "monkey") {
+
+    x.fillStyle = "#754522";
+
+    x.beginPath();
+
+    x.arc(
+      26,
+      24,
+      21,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#c67c3d";
+
+    x.beginPath();
+
+    x.ellipse(
+      26,
+      30,
+      12,
+      8,
+      0,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#111";
+
+    x.fillRect(
+      15,
+      18,
+      5,
+      5
+    );
+
+    x.fillRect(
+      32,
+      18,
+      5,
+      5
+    );
+
+  }
+
+  /* GLITCH */
+
+  else if (e.kind === "glitch") {
+
+    x.fillStyle =
+      Math.random() > .5
+        ? "#ff16aa"
+        : "#18e5df";
+
+    x.fillRect(
+      4,
+      7,
+      44,
+      34
+    );
+
+    x.fillStyle = "#111";
+
+    x.fillRect(
+      13,
+      17,
+      7,
+      7
+    );
+
+    x.fillRect(
+      33,
+      17,
+      7,
+      7
+    );
+
+    x.fillStyle = "#fff";
+
+    x.fillRect(
+      18,
+      31,
+      22,
+      4
+    );
+
+  }
+
+  /* BANANA MONSTER */
+
+  else if (e.kind === "banana") {
+
+    x.strokeStyle = "#e6a900";
+    x.lineWidth = 12;
+
+    x.beginPath();
+
+    x.arc(
+      26,
+      18,
+      19,
+      0,
+      Math.PI
+    );
+
+    x.stroke();
+
+    x.strokeStyle = "#ffe14a";
+    x.lineWidth = 8;
+
+    x.stroke();
+
+  }
+
+  /* PÁSSARO */
+
+  else {
+
+    x.fillStyle = "#2b2732";
+
+    x.beginPath();
+
+    x.ellipse(
+      25,
+      20,
+      23,
+      13,
+      0,
+      0,
+      7
+    );
+
+    x.fill();
+
+    x.fillStyle = "#fff";
+
+    x.beginPath();
+
+    x.moveTo(3, 18);
+    x.lineTo(-13, 9);
+    x.lineTo(0, 25);
+
+    x.fill();
+
+    x.fillStyle = "#111";
+
+    x.fillRect(
+      15,
+      15,
+      5,
+      5
+    );
+
+    x.fillRect(
+      31,
+      15,
+      5,
+      5
+    );
+
+  }
+
+  x.restore();
+
+}
+
+/* =========================
+   PORTAL CASCA DE BANANA
+========================= */
+
+function portal(po) {
+
+  const q = po.x - cam;
+
+  /* base */
+
+  x.fillStyle = "#ffd21c";
+
+  x.beginPath();
+
+  x.ellipse(
+    q,
+    397,
+    34,
+    12,
+    0,
+    0,
+    7
+  );
+
+  x.fill();
+
+  /* corpo */
+
+  x.fillStyle = "#e4a900";
+
+  x.fillRect(
+    q - 34,
+    385,
+    68,
+    15
+  );
+
+  /* buraco */
+
+  x.fillStyle = "#111";
+
+  x.beginPath();
+
+  x.ellipse(
+    q,
+    380,
+    25,
+    10,
+    0,
+    0,
+    7
+  );
+
+  x.fill();
+
+  /* casca aberta */
+
+  x.fillStyle = "#ffe45c";
+
+  x.beginPath();
+
+  x.moveTo(
+    q - 32,
+    389
+  );
+
+  x.quadraticCurveTo(
+    q - 58,
+    420,
+    q - 38,
+    430
+  );
+
+  x.quadraticCurveTo(
+    q - 20,
+    414,
+    q - 17,
+    397
+  );
+
+  x.fill();
+
+  x.fillStyle = "#fff";
+
+  x.font = "900 12px system-ui";
+  x.textAlign = "center";
+
+  x.fillText(
+    "DIM",
+    q,
+    355
+  );
+
+}
+
+/* =========================
+   UPDATE
+========================= */
+
+function update() {
+
+  if (dead)
+    return;
+
+  let acceleration =
+    world === 2
+      ? .5
+      : .8;
+
+  let max =
+    world === 2
+      ? 4.5
+      : 6;
+
+  if (key.l)
+    p.vx -= acceleration;
+
+  if (key.r)
+    p.vx += acceleration;
+
+  if (!key.l && !key.r) {
+
+    p.vx *=
+      world === 2
+        ? .985
+        : .82;
+
+  }
+
+  p.vx =
+    Math.max(
+      -max,
+      Math.min(max, p.vx)
+    );
+
+  /* gravidade */
+
+  p.vy +=
+    world === 3
+      ? .38
+      : .65;
+
+  p.vy =
+    Math.min(
+      p.vy,
+      15
+    );
+
+  const oldY = p.y;
+
+  p.x += p.vx;
+  p.y += p.vy;
+
+  p.on = false;
+
+  /* chão */
+
+  for (const s of sections) {
+
+    for (const g of s.ground) {
+
+      if (
+
+        p.x + p.w > g[0] &&
+        p.x < g[1] &&
+        oldY + p.h <= 520 &&
+        p.y + p.h >= 520 &&
+        p.vy >= 0
+
+      ) {
+
+        p.y = 462;
+        p.vy = 0;
+        p.on = true;
+
+      }
+
+    }
+
+    /* plataformas */
+
+    for (const q of s.plats) {
+
+      if (
+
+        p.x + p.w > q.x &&
+        p.x < q.x + q.w &&
+        oldY + p.h <= q.y &&
+        p.y + p.h >= q.y &&
+        p.vy >= 0
+
+      ) {
+
+        p.y =
+          q.y - p.h;
+
+        p.vy = 0;
+        p.on = true;
+
+      }
+
+    }
+
+  }
+
+  /* caiu */
+
+  if (p.y > 680) {
+
+    hurt();
+
+    p.y = 350;
+    p.vy = 0;
+
+  }
+
+  p.x =
+    Math.max(
+      0,
+      p.x
+    );
+
+  /* câmera */
+
+  cam =
+    Math.max(
+      0,
+      p.x - 330
+    );
+
+  /* bananas */
+
+  for (const s of sections) {
+
+    for (const b of s.bananas) {
+
+      if (
+
+        !b.got &&
+        Math.abs(p.x - b.x) < 35 &&
+        Math.abs(p.y - b.y) < 45
+
+      ) {
+
+        b.got = true;
+        score += 10;
+
+      }
+
+    }
+
+  }
+
+  /* inimigos */
+
+  for (const e of enemies) {
+
+    e.x += e.v;
+
+    if (
+      e.x < e.min ||
+      e.x > e.max
+    ) {
+
+      e.v *= -1;
+
+    }
+
+    if (e.type !== world)
+      continue;
+
+    const er = {
+
+      x: e.x,
+      y: e.y,
+      w: e.w,
+      h: e.h
+
+    };
+
+    if (hit(p, er)) {
+
+      /* pisou no inimigo */
+
+      if (
+        p.vy > 2 &&
+        p.y + p.h < e.y + 18
+      ) {
+
+        score += 25;
+
+        p.vy = -9;
+
+        e.x =
+          e.min - 100;
+
+      }
+
+      else {
+
+        hurt();
+
+      }
+
+    }
+
+  }
+
+  /* portal */
+
+  if (cool > 0)
+    cool--;
+
+  for (const s of sections) {
+
+    if (
+
+      Math.abs(
+        p.x - s.portal.x
+      ) < 42 &&
+
+      Math.abs(
+        p.y - s.portal.y
+      ) < 70 &&
+
+      cool === 0
+
+    ) {
+
+      world = s.type;
+
+      score += 50;
+
+      cool = 50;
+
+      p.x =
+        s.portal.x + 70;
+
+      p.y = 300;
+
+    }
+
+  }
+
+  /* HUD */
+
+  document.getElementById(
+    "score"
+  ).textContent =
+    "🍌 " + score;
+
+  document.getElementById(
+    "lives"
+  ).textContent =
+    "❤️".repeat(lives) +
+    "🖤".repeat(3 - lives);
+
+  document.getElementById(
+    "dim"
+  ).textContent =
+    D[world][0];
+
+}
+
+/* =========================
+   DRAW
+========================= */
+
+function draw() {
+
+  bg();
+
+  const d = D[world];
+
+  /* terreno */
+
+  for (const s of sections) {
+
+    for (const g of s.ground) {
+
+      x.fillStyle = d[2];
+
+      x.fillRect(
+        g[0] - cam,
+        520,
+        g[1] - g[0],
+        100
+      );
+
+      x.fillStyle = d[3];
+
+      x.fillRect(
+        g[0] - cam,
+        552,
+        g[1] - g[0],
+        68
+      );
+
+    }
+
+    /* plataformas */
+
+    for (const q of s.plats) {
+
+      x.fillStyle = d[2];
+
+      x.fillRect(
+        q.x - cam,
+        q.y,
+        q.w,
+        q.h
+      );
+
+      x.fillStyle = "#fff4";
+
+      x.fillRect(
+        q.x - cam,
+        q.y,
+        q.w,
+        4
+      );
+
+    }
+
+    /* bananas */
+
+    for (const b of s.bananas) {
+
+      if (!b.got) {
+
+        x.strokeStyle =
+          "#e3a800";
+
+        x.lineWidth = 6;
+
+        x.beginPath();
+
+        x.arc(
+          b.x - cam,
+          b.y,
+          11,
+          .3,
+          2.7
+        );
+
+        x.stroke();
+
+      }
+
+    }
+
+    portal(s.portal);
+
+  }
+
+  /* inimigos */
+
+  for (const e of enemies) {
+
+    if (
+      e.type === world &&
+      e.x - cam > -100 &&
+      e.x - cam < W + 100
+    ) {
+
+      enemy(e);
+
+    }
+
+  }
+
+  player();
+
+  /* game over */
+
+  if (dead) {
+
+    x.fillStyle = "#000b";
+
+    x.fillRect(
+      0,
+      0,
+      W,
+      H
+    );
+
+    x.fillStyle = "#fff";
+
+    x.textAlign = "center";
+
+    x.font =
+      "900 50px system-ui";
+
+    x.fillText(
+      "GAME OVER 🍌💀",
+      550,
+      280
+    );
+
+    x.font =
+      "900 23px system-ui";
+
+    x.fillText(
+      "Carrega RESTART",
+      550,
+      325
+    );
+
+  }
+
+}
+
+/* =========================
+   LOOP
+========================= */
+
+(function loop() {
+
+  update();
+  draw();
+
+  requestAnimationFrame(loop);
+
+})();
+
+</script>
+
+</body>
+</html>
